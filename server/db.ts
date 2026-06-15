@@ -19,7 +19,7 @@ export async function connectDB(): Promise<typeof mongoose> {
   if (cached!.conn) return cached!.conn;
 
   if (!cached!.promise) {
-    cached!.promise = mongoose.connect(MONGODB_URI);
+    cached!.promise = mongoose.connect(MONGODB_URI, { dbName: 'flgame' });
   }
 
   cached!.conn = await cached!.promise;

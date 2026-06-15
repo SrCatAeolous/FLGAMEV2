@@ -41,9 +41,9 @@ async function start() {
   try {
     if (process.env.MONGODB_URI) {
       await connectDB();
-      console.log('Connected to MongoDB');
+      console.log('Connected to MongoDB (db: flgame)');
     } else {
-      console.warn('MONGODB_URI not set - running without database (auth/packs disabled)');
+      console.warn('MONGODB_URI not set - auth/packs will not work');
     }
 
     httpServer.listen(PORT, () => {
