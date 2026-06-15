@@ -173,22 +173,37 @@ export class PlayerSprite {
 
   performSkillMove(dirX: number, dirY: number): boolean {
     if (this.isSkillMoving || this.legend.skillMoves < 2) return false;
-    if (this.stamina < 20) return false;
+    if (this.stamina < 15) return false;
+
+    // Use current velocity as fallback direction
+    let dx = dirX;
+    let dy = dirY;
+    if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) {
+      dx = this.body.body?.velocity.x ?? 0;
+      dy = this.body.body?.velocity.y ?? 0;
+    }
+    // If still no direction, dash forward
+    if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) {
+      dx = this.isHome ? 1 : -1;
+      dy = 0;
+    }
 
     this.isSkillMoving = true;
     this.skillMoveTimer = PLAYER_CONFIG.SKILL_MOVE_DURATION;
-    this.stamina -= 20;
+    this.stamina -= 15;
 
-    const speed = this.getSpeed() * PLAYER_CONFIG.SKILL_MOVE_SPEED_BOOST * (this.legend.stats.dri / 100);
-    const len = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+    const driBonus = 0.6 + (this.legend.stats.dri / 100) * 0.6;
+    const speed = this.getSpeed() * PLAYER_CONFIG.SKILL_MOVE_SPEED_BOOST * driBonus;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
 
-    const perpX = -dirY / len;
-    const perpY = dirX / len;
-    const swerve = (Math.random() > 0.5 ? 1 : -1) * 0.5;
+    // Quick directional dash with slight perpendicular offset
+    const perpX = -dy / len;
+    const perpY = dx / len;
+    const swerve = (Math.random() > 0.5 ? 1 : -1) * 0.3;
 
     this.body.setVelocity(
-      (dirX / len + perpX * swerve) * speed,
-      (dirY / len + perpY * swerve) * speed
+      (dx / len + perpX * swerve) * speed,
+      (dy / len + perpY * swerve) * speed
     );
 
     return true;

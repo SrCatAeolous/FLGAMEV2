@@ -277,8 +277,18 @@ export class MatchScene extends Phaser.Scene {
     const dist = player.distanceTo(this.ball.body.x, this.ball.body.y);
     if (dist > PLAYER_CONFIG.KICK_RANGE + BALL_CONFIG.RADIUS) return;
 
-    const dirX = this.ball.body.x - player.body.x;
-    const dirY = this.ball.body.y - player.body.y;
+    // Aim toward the opponent's goal with some variation based on player position
+    const goalX = player.isHome ? FIELD.WIDTH : 0;
+    const goalCY = FIELD.HEIGHT / 2;
+    // Add slight aim toward goal center Y, mixed with ball-relative direction
+    const toBallX = this.ball.body.x - player.body.x;
+    const toBallY = this.ball.body.y - player.body.y;
+    const toGoalX = goalX - this.ball.body.x;
+    const toGoalY = goalCY - this.ball.body.y + (Math.random() - 0.5) * 60;
+
+    // Blend: 40% ball direction, 60% goal direction for smarter kicks
+    const dirX = toBallX * 0.4 + toGoalX * 0.6;
+    const dirY = toBallY * 0.4 + toGoalY * 0.6;
 
     const shotPower = player.legend.stats.sho / 100;
     const force = BALL_CONFIG.KICK_FORCE * (0.7 + shotPower * 0.6);
@@ -390,6 +400,31 @@ export class MatchScene extends Phaser.Scene {
       this.homeScore++;
       this.onGoal(true);
     }
+
+    // Prevent ball from going past goal line outside the goalposts
+    if (bx < GOAL.WIDTH + BALL_CONFIG.RADIUS && (by <= goalTop || by >= goalBottom)) {
+      this.ball.body.setX(GOAL.WIDTH + BALL_CONFIG.RADIUS + 1);
+      this.ball.body.setVelocityX(Math.abs(this.ball.body.body?.velocity.x ?? 0) * 0.5);
+    }
+    if (bx > FIELD.WIDTH - GOAL.WIDTH - BALL_CONFIG.RADIUS && (by <= goalTop || by >= goalBottom)) {
+      this.ball.body.setX(FIELD.WIDTH - GOAL.WIDTH - BALL_CONFIG.RADIUS - 1);
+      this.ball.body.setVelocityX(-Math.abs(this.ball.body.body?.velocity.x ?? 0) * 0.5);
+    }
+
+    // Keep players inside the pitch (between goal lines except in goal area)
+    this.allPlayers.forEach(p => {
+      const px = p.body.x;
+      const py = p.body.y;
+      const r = p.role === 'goalkeeper' ? GK_CONFIG.RADIUS : PLAYER_CONFIG.RADIUS;
+      if (px < GOAL.WIDTH + r && (py <= goalTop || py >= goalBottom)) {
+        p.body.setX(GOAL.WIDTH + r + 1);
+        p.body.setVelocityX(0);
+      }
+      if (px > FIELD.WIDTH - GOAL.WIDTH - r && (py <= goalTop || py >= goalBottom)) {
+        p.body.setX(FIELD.WIDTH - GOAL.WIDTH - r - 1);
+        p.body.setVelocityX(0);
+      }
+    });
   }
 
   private onGoal(homeScored: boolean): void {
@@ -481,7 +516,7 @@ export class MatchScene extends Phaser.Scene {
 
     if (!joystickArea || !joystickKnob) return;
 
-    const radius = 50;
+    const radius = 60;
 
     const handleTouch = (clientX: number, clientY: number) => {
       const rect = joystickArea.getBoundingClientRect();

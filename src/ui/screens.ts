@@ -545,9 +545,9 @@ function createGameScreen(): HTMLElement {
         <div class="joystick-knob" id="joystick-knob"></div>
       </div>
       <div class="mobile-right-btns">
-        <div class="action-btn skill-btn" id="skill-btn">SKILL</div>
-        <div class="action-btn sprint-btn" id="sprint-btn">SPRINT</div>
-        <div class="action-btn kick-btn" id="kick-btn">KICK</div>
+        <div class="action-btn skill-btn" id="skill-btn">\u26A1</div>
+        <div class="action-btn sprint-btn" id="sprint-btn">\uD83C\uDFC3</div>
+        <div class="action-btn kick-btn" id="kick-btn">\u26BD</div>
       </div>
     </div>
     <div class="result-overlay" id="result-overlay">
