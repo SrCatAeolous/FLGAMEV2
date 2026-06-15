@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { connectDB } from '../_lib/db';
-import { User } from '../_lib/User';
-import { verifyToken } from '../_lib/auth';
+import { connectDB } from '../_lib/db.js';
+import { User } from '../_lib/User.js';
+import { verifyToken } from '../_lib/auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

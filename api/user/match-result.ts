@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { connectDB } from '../_lib/db';
-import { User } from '../_lib/User';
-import { verifyToken } from '../_lib/auth';
+import { connectDB } from '../_lib/db.js';
+import { User } from '../_lib/User.js';
+import { verifyToken } from '../_lib/auth.js';
 
 const XP_PER_LEVEL = 500;
 
