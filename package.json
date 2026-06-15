@@ -22,6 +22,7 @@
   "license": "ISC",
   "description": "Fut Legends - Web football game with legendary players, Haxball style",
   "dependencies": {
+    "@vercel/node": "^5.8.17",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

@@ -3,6 +3,11 @@
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
+    { "source": "/api/auth/login", "destination": "/api/auth/login" },
+    { "source": "/api/auth/register", "destination": "/api/auth/register" },
+    { "source": "/api/user/profile", "destination": "/api/user/profile" },
+    { "source": "/api/user/match-result", "destination": "/api/user/match-result" },
+    { "source": "/api/packs/open", "destination": "/api/packs/open" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
