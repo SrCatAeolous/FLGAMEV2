@@ -6,7 +6,7 @@ import type { Difficulty } from '../ui/screens';
 
 let game: Phaser.Game | null = null;
 
-export function startGame(players: Legend[], difficulty: Difficulty): void {
+export function startGame(player: Legend, goalkeeper: Legend, difficulty: Difficulty): void {
   const container = document.getElementById('game-container');
   if (!container) return;
 
@@ -34,11 +34,14 @@ export function startGame(players: Legend[], difficulty: Difficulty): void {
         debug: false,
       },
     },
+    audio: {
+      disableWebAudio: false,
+    },
     scene: [MatchScene],
   };
 
   game = new Phaser.Game(config);
-  game.scene.start('MatchScene', { players, difficulty });
+  game.scene.start('MatchScene', { player, goalkeeper, difficulty });
 }
 
 export function destroyGame(): void {

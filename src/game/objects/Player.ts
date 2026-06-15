@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { Legend } from '../../data/legends';
-import { PLAYER_CONFIG, COLORS } from '../config';
+import { PLAYER_CONFIG, GK_CONFIG, COLORS } from '../config';
+
+export type PlayerRole = 'field' | 'goalkeeper';
 
 export class PlayerSprite {
   body: Phaser.Physics.Arcade.Sprite;
@@ -8,35 +10,45 @@ export class PlayerSprite {
   nameLabel: Phaser.GameObjects.Text;
   legend: Legend;
   isHome: boolean;
+  role: PlayerRole;
   stamina: number;
   isSkillMoving: boolean;
   skillMoveTimer: number;
+  isDiving: boolean;
+  diveTimer: number;
   private scene: Phaser.Scene;
   private _initialText?: Phaser.GameObjects.Text;
   private staminaBar?: Phaser.GameObjects.Graphics;
+  private controlIndicator?: Phaser.GameObjects.Graphics;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, legend: Legend, isHome: boolean) {
+  constructor(scene: Phaser.Scene, x: number, y: number, legend: Legend, isHome: boolean, role: PlayerRole = 'field') {
     this.scene = scene;
     this.legend = legend;
     this.isHome = isHome;
+    this.role = role;
     this.stamina = PLAYER_CONFIG.STAMINA_MAX;
     this.isSkillMoving = false;
     this.skillMoveTimer = 0;
+    this.isDiving = false;
+    this.diveTimer = 0;
 
     this.graphics = scene.add.graphics();
     this.staminaBar = scene.add.graphics();
+    this.controlIndicator = scene.add.graphics();
+
+    const radius = role === 'goalkeeper' ? GK_CONFIG.RADIUS : PLAYER_CONFIG.RADIUS;
 
     this.body = scene.physics.add.sprite(x, y, '__DEFAULT');
     this.body.setVisible(false);
-    this.body.setCircle(PLAYER_CONFIG.RADIUS);
-    this.body.setOffset(-PLAYER_CONFIG.RADIUS, -PLAYER_CONFIG.RADIUS);
+    this.body.setCircle(radius);
+    this.body.setOffset(-radius, -radius);
     this.body.setCollideWorldBounds(true);
     this.body.setDamping(true);
     this.body.setDrag(0.9);
     this.body.setDepth(4);
     this.body.setMaxVelocity(this.getSpeed() * PLAYER_CONFIG.SPRINT_MULTIPLIER);
 
-    this.nameLabel = scene.add.text(x, y + PLAYER_CONFIG.RADIUS + 6, legend.shortName, {
+    this.nameLabel = scene.add.text(x, y + radius + 6, legend.shortName, {
       fontFamily: 'Oswald',
       fontSize: '10px',
       color: '#ffffff',
@@ -47,45 +59,76 @@ export class PlayerSprite {
     this.nameLabel.setOrigin(0.5, 0);
     this.nameLabel.setDepth(6);
 
-    this.drawPlayer(x, y);
+    this.drawPlayer(x, y, false);
   }
 
-  private drawPlayer(x: number, y: number): void {
+  private getColors(): { fill: number; outline: number } {
+    if (this.role === 'goalkeeper') {
+      return {
+        fill: this.isHome ? COLORS.GK_HOME : COLORS.GK_AWAY,
+        outline: this.isHome ? COLORS.GK_HOME_OUTLINE : COLORS.GK_AWAY_OUTLINE,
+      };
+    }
+    return {
+      fill: this.isHome ? COLORS.HOME : COLORS.AWAY,
+      outline: this.isHome ? COLORS.HOME_OUTLINE : COLORS.AWAY_OUTLINE,
+    };
+  }
+
+  private drawPlayer(x: number, y: number, isControlled: boolean): void {
     this.graphics.clear();
     this.graphics.setDepth(4);
 
-    const fillColor = this.isHome ? COLORS.HOME : COLORS.AWAY;
-    const outlineColor = this.isHome ? COLORS.HOME_OUTLINE : COLORS.AWAY_OUTLINE;
+    const radius = this.role === 'goalkeeper' ? GK_CONFIG.RADIUS : PLAYER_CONFIG.RADIUS;
+    const { fill, outline } = this.getColors();
 
     if (this.isSkillMoving) {
       this.graphics.lineStyle(PLAYER_CONFIG.BORDER_WIDTH + 2, 0x00ff88, 0.8);
-      this.graphics.strokeCircle(x, y, PLAYER_CONFIG.RADIUS + 4);
+      this.graphics.strokeCircle(x, y, radius + 4);
     }
 
-    this.graphics.fillStyle(fillColor, 1);
-    this.graphics.fillCircle(x, y, PLAYER_CONFIG.RADIUS);
+    if (this.isDiving) {
+      this.graphics.lineStyle(3, 0xff4444, 0.9);
+      this.graphics.strokeCircle(x, y, radius + 3);
+    }
 
-    this.graphics.lineStyle(PLAYER_CONFIG.BORDER_WIDTH, outlineColor, 1);
-    this.graphics.strokeCircle(x, y, PLAYER_CONFIG.RADIUS);
+    this.graphics.fillStyle(fill, 1);
+    this.graphics.fillCircle(x, y, radius);
 
-    const initial = this.legend.shortName.charAt(0);
+    this.graphics.lineStyle(PLAYER_CONFIG.BORDER_WIDTH, outline, 1);
+    this.graphics.strokeCircle(x, y, radius);
+
+    const initial = this.role === 'goalkeeper' ? 'GK' : this.legend.shortName.charAt(0);
     if (this._initialText) this._initialText.destroy();
     this._initialText = this.scene.add.text(x, y, initial, {
       fontFamily: 'Oswald',
-      fontSize: '14px',
+      fontSize: this.role === 'goalkeeper' ? '11px' : '14px',
       fontStyle: 'bold',
-      color: this.isHome ? '#0A0A0F' : '#FFFFFF',
+      color: '#FFFFFF',
     });
     this._initialText.setOrigin(0.5, 0.5);
     this._initialText.setDepth(4);
 
-    if (this.staminaBar && this.isHome) {
+    if (this.controlIndicator) {
+      this.controlIndicator.clear();
+      this.controlIndicator.setDepth(8);
+      if (isControlled) {
+        this.controlIndicator.lineStyle(2, 0xffffff, 0.9);
+        this.controlIndicator.strokeTriangle(
+          x, y - radius - 12,
+          x - 5, y - radius - 18,
+          x + 5, y - radius - 18
+        );
+      }
+    }
+
+    if (this.staminaBar && this.role === 'field') {
       this.staminaBar.clear();
       this.staminaBar.setDepth(7);
-      const barW = PLAYER_CONFIG.RADIUS * 2;
+      const barW = radius * 2;
       const barH = 3;
       const barX = x - barW / 2;
-      const barY = y - PLAYER_CONFIG.RADIUS - 8;
+      const barY = y - radius - 8;
 
       this.staminaBar.fillStyle(0x333333, 0.7);
       this.staminaBar.fillRect(barX, barY, barW, barH);
@@ -98,10 +141,13 @@ export class PlayerSprite {
   }
 
   getSpeed(): number {
+    if (this.role === 'goalkeeper') {
+      return GK_CONFIG.SPEED * (0.85 + (this.legend.stats.pac / 100) * 0.3);
+    }
     return PLAYER_CONFIG.SPEED * (0.8 + (this.legend.stats.pac / 100) * 0.4);
   }
 
-  update(delta: number): void {
+  update(delta: number, isControlled = false): void {
     if (this.isSkillMoving) {
       this.skillMoveTimer -= delta;
       if (this.skillMoveTimer <= 0) {
@@ -109,12 +155,20 @@ export class PlayerSprite {
       }
     }
 
-    if (this.stamina < PLAYER_CONFIG.STAMINA_MAX) {
+    if (this.isDiving) {
+      this.diveTimer -= delta;
+      if (this.diveTimer <= 0) {
+        this.isDiving = false;
+      }
+    }
+
+    if (this.stamina < PLAYER_CONFIG.STAMINA_MAX && this.role === 'field') {
       this.stamina = Math.min(PLAYER_CONFIG.STAMINA_MAX, this.stamina + PLAYER_CONFIG.STAMINA_REGEN * (delta / 1000));
     }
 
-    this.drawPlayer(this.body.x, this.body.y);
-    this.nameLabel.setPosition(this.body.x, this.body.y + PLAYER_CONFIG.RADIUS + 6);
+    this.drawPlayer(this.body.x, this.body.y, isControlled);
+    const radius = this.role === 'goalkeeper' ? GK_CONFIG.RADIUS : PLAYER_CONFIG.RADIUS;
+    this.nameLabel.setPosition(this.body.x, this.body.y + radius + 6);
   }
 
   performSkillMove(dirX: number, dirY: number): boolean {
@@ -138,6 +192,13 @@ export class PlayerSprite {
     );
 
     return true;
+  }
+
+  dive(dirY: number): void {
+    if (this.isDiving || this.role !== 'goalkeeper') return;
+    this.isDiving = true;
+    this.diveTimer = GK_CONFIG.DIVE_DURATION;
+    this.body.setVelocityY(dirY * GK_CONFIG.DIVE_SPEED);
   }
 
   sprint(active: boolean): void {
@@ -176,5 +237,6 @@ export class PlayerSprite {
     this.nameLabel.destroy();
     this._initialText?.destroy();
     this.staminaBar?.destroy();
+    this.controlIndicator?.destroy();
   }
 }

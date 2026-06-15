@@ -3,24 +3,25 @@ import { PACK_TYPES } from '../data/packs';
 import { createLegendCard, updateCardSelection } from './cards';
 import * as api from '../api/client';
 
-export type Screen = 'login' | 'home' | 'team-select' | 'game' | 'packs' | 'club' | 'lobby';
+export type Screen = 'login' | 'home' | 'player-select' | 'game' | 'packs' | 'club' | 'lobby';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
 interface AppState {
   currentScreen: Screen;
-  selectedPlayers: Legend[];
+  selectedPlayer: Legend | null;
+  selectedGK: Legend | null;
   difficulty: Difficulty;
   userData: api.UserData | null;
-  onStartGame: (players: Legend[], difficulty: Difficulty) => void;
+  onStartGame: (player: Legend, goalkeeper: Legend, difficulty: Difficulty) => void;
 }
 
-const MAX_TEAM_SIZE = 3;
 let state: AppState;
 
-export function initUI(onStartGame: (players: Legend[], difficulty: Difficulty) => void): void {
+export function initUI(onStartGame: (player: Legend, goalkeeper: Legend, difficulty: Difficulty) => void): void {
   state = {
     currentScreen: 'login',
-    selectedPlayers: [],
+    selectedPlayer: null,
+    selectedGK: null,
     difficulty: 'normal',
     userData: null,
     onStartGame,
@@ -33,7 +34,7 @@ export function initUI(onStartGame: (players: Legend[], difficulty: Difficulty) 
   app.appendChild(createHomeScreen());
   app.appendChild(createPacksScreen());
   app.appendChild(createClubScreen());
-  app.appendChild(createTeamSelectScreen());
+  app.appendChild(createPlayerSelectScreen());
   app.appendChild(createGameScreen());
   app.appendChild(createLobbyScreen());
 
@@ -68,8 +69,6 @@ function createLoginScreen(): HTMLElement {
         <div class="login-error" id="login-error"></div>
         <button class="btn btn-primary" id="btn-login">Iniciar Sesi\u00F3n</button>
         <button class="btn" id="btn-register">Crear Cuenta</button>
-        <div class="login-divider"><span>o</span></div>
-        <button class="btn btn-guest" id="btn-guest">Jugar sin cuenta</button>
       </div>
     </div>
   `;
@@ -98,20 +97,6 @@ function createLoginScreen(): HTMLElement {
 
   screen.querySelector('#btn-login')!.addEventListener('click', () => doAuth('login'));
   screen.querySelector('#btn-register')!.addEventListener('click', () => doAuth('register'));
-
-  screen.querySelector('#btn-guest')!.addEventListener('click', () => {
-    state.userData = {
-      id: 'guest',
-      username: 'Invitado',
-      coins: 10000,
-      level: 1,
-      xp: 0,
-      cards: LEGENDS.slice(0, 8).map((l) => ({ legendId: l.id, obtainedAt: new Date().toISOString() })),
-      stats: { wins: 0, losses: 0, draws: 0, goalsScored: 0, goalsConceded: 0, matchesPlayed: 0 },
-    };
-    showScreen('home');
-    updateHomeUI();
-  });
 
   screen.querySelector('#login-password')!.addEventListener('keydown', (e) => {
     if ((e as KeyboardEvent).key === 'Enter') doAuth('login');
@@ -160,7 +145,7 @@ function createHomeScreen(): HTMLElement {
       </button>
       <button class="home-menu-btn" id="btn-online">
         <span class="hm-icon">\uD83C\uDF10</span>
-        <span class="hm-label">Online</span>
+        <span class="hm-label">Online 1v1</span>
       </button>
     </div>
     <div class="difficulty-section">
@@ -174,7 +159,7 @@ function createHomeScreen(): HTMLElement {
     <button class="btn-logout" id="btn-logout">Cerrar Sesi\u00F3n</button>
   `;
 
-  screen.querySelector('#btn-play')!.addEventListener('click', () => showScreen('team-select'));
+  screen.querySelector('#btn-play')!.addEventListener('click', () => showScreen('player-select'));
   screen.querySelector('#btn-open-packs')!.addEventListener('click', () => {
     showScreen('packs');
     renderPacks();
@@ -284,62 +269,16 @@ async function handleOpenPack(packId: string): Promise<void> {
     return;
   }
 
-  let cards: { legendId: string; tier: string }[];
-
-  if (state.userData.id === 'guest') {
-    state.userData.coins -= pack.cost;
-    cards = generateGuestPack(packId);
-    for (const c of cards) {
-      state.userData.cards.push({ legendId: c.legendId, obtainedAt: new Date().toISOString() });
-    }
-  } else {
-    try {
-      const result = await api.openPack(packId);
-      cards = result.cards;
-      state.userData.coins = result.remainingCoins;
-      state.userData.cards.push(...cards.map((c) => ({ legendId: c.legendId, obtainedAt: new Date().toISOString() })));
-    } catch (err) {
-      alert((err as Error).message);
-      return;
-    }
+  try {
+    const result = await api.openPack(packId);
+    const cards = result.cards;
+    state.userData.coins = result.remainingCoins;
+    state.userData.cards.push(...cards.map((c) => ({ legendId: c.legendId, obtainedAt: new Date().toISOString() })));
+    showPackOpening(cards);
+    document.getElementById('packs-coins')!.textContent = String(state.userData.coins);
+  } catch (err) {
+    alert((err as Error).message);
   }
-
-  showPackOpening(cards);
-  document.getElementById('packs-coins')!.textContent = String(state.userData.coins);
-}
-
-function generateGuestPack(packId: string): { legendId: string; tier: string }[] {
-  const tierPools: Record<string, string[]> = {
-    bronze: LEGENDS.filter((l) => l.tier === 'bronze').map((l) => l.id),
-    silver: LEGENDS.filter((l) => l.tier === 'silver').map((l) => l.id),
-    gold: LEGENDS.filter((l) => l.tier === 'gold').map((l) => l.id),
-    icon: LEGENDS.filter((l) => l.tier === 'icon').map((l) => l.id),
-    prime: LEGENDS.filter((l) => l.tier === 'prime').map((l) => l.id),
-  };
-
-  const weights: Record<string, { tier: string; weight: number }[]> = {
-    bronze: [{ tier: 'bronze', weight: 75 }, { tier: 'silver', weight: 20 }, { tier: 'gold', weight: 5 }],
-    silver: [{ tier: 'silver', weight: 60 }, { tier: 'gold', weight: 30 }, { tier: 'icon', weight: 10 }],
-    gold: [{ tier: 'gold', weight: 55 }, { tier: 'icon', weight: 35 }, { tier: 'prime', weight: 10 }],
-    icon: [{ tier: 'icon', weight: 50 }, { tier: 'prime', weight: 50 }],
-  };
-
-  const w = weights[packId] || weights.bronze;
-  const cards: { legendId: string; tier: string }[] = [];
-
-  for (let i = 0; i < 3; i++) {
-    const total = w.reduce((s, x) => s + x.weight, 0);
-    let r = Math.random() * total;
-    let tier = w[w.length - 1].tier;
-    for (const x of w) {
-      r -= x.weight;
-      if (r <= 0) { tier = x.tier; break; }
-    }
-    const pool = tierPools[tier];
-    cards.push({ legendId: pool[Math.floor(Math.random() * pool.length)], tier });
-  }
-
-  return cards;
 }
 
 function showPackOpening(cards: { legendId: string; tier: string }[]): void {
@@ -450,32 +389,46 @@ function renderClub(filter?: string): void {
   }
 }
 
-// ==================== TEAM SELECT SCREEN ====================
-function createTeamSelectScreen(): HTMLElement {
+// ==================== PLAYER SELECT SCREEN ====================
+function createPlayerSelectScreen(): HTMLElement {
   const screen = document.createElement('div');
-  screen.className = 'screen team-select-screen';
-  screen.id = 'screen-team-select';
+  screen.className = 'screen player-select-screen';
+  screen.id = 'screen-player-select';
 
   const header = document.createElement('div');
   header.innerHTML = `
     <button class="back-btn" id="btn-back-home">\u2190 Inicio</button>
-    <div class="team-select-header">Elige tu Equipo</div>
-    <div class="team-select-sub">Selecciona ${MAX_TEAM_SIZE} leyendas de tu colecci\u00F3n</div>
+    <div class="team-select-header">Elige tu Jugador</div>
+    <div class="team-select-sub">Selecciona 1 leyenda de campo</div>
   `;
   screen.appendChild(header);
 
-  const grid = document.createElement('div');
-  grid.className = 'cards-grid';
-  grid.id = 'cards-grid';
-  screen.appendChild(grid);
+  const fieldSection = document.createElement('div');
+  fieldSection.className = 'select-section';
+  fieldSection.innerHTML = '<div class="section-title">\u26BD Jugador de Campo</div>';
+  const fieldGrid = document.createElement('div');
+  fieldGrid.className = 'cards-grid';
+  fieldGrid.id = 'field-cards-grid';
+  fieldSection.appendChild(fieldGrid);
+  screen.appendChild(fieldSection);
+
+  const gkSection = document.createElement('div');
+  gkSection.className = 'select-section';
+  gkSection.innerHTML = '<div class="section-title">\uD83E\uDDE4 Portero</div>';
+  const gkGrid = document.createElement('div');
+  gkGrid.className = 'cards-grid gk-grid';
+  gkGrid.id = 'gk-cards-grid';
+  gkSection.appendChild(gkGrid);
+  screen.appendChild(gkSection);
 
   const bar = document.createElement('div');
   bar.className = 'selected-team-bar';
   bar.id = 'selected-team-bar';
   bar.innerHTML = `
-    <div class="selected-team-info">Equipo: <span id="team-count">0</span> / ${MAX_TEAM_SIZE}</div>
-    <div class="selected-avatars" id="selected-avatars">
-      ${Array(MAX_TEAM_SIZE).fill('<div class="selected-mini"></div>').join('')}
+    <div class="selected-team-info">
+      <span class="sel-label">Jugador:</span> <span id="sel-player-name">---</span>
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <span class="sel-label">Portero:</span> <span id="sel-gk-name">---</span>
     </div>
     <button class="btn btn-primary" id="btn-start-match" style="padding:10px 20px;font-size:14px" disabled>\u00A1Jugar!</button>
   `;
@@ -487,68 +440,90 @@ function createTeamSelectScreen(): HTMLElement {
   });
 
   screen.querySelector('#btn-start-match')!.addEventListener('click', () => {
-    if (state.selectedPlayers.length === MAX_TEAM_SIZE) {
+    if (state.selectedPlayer && state.selectedGK) {
       showScreen('game');
-      state.onStartGame(state.selectedPlayers, state.difficulty);
+      state.onStartGame(state.selectedPlayer, state.selectedGK, state.difficulty);
     }
   });
 
   return screen;
 }
 
-function renderTeamSelect(): void {
-  const grid = document.getElementById('cards-grid')!;
-  grid.innerHTML = '';
-  state.selectedPlayers = [];
-  updateTeamBar();
+function renderPlayerSelect(): void {
+  const fieldGrid = document.getElementById('field-cards-grid')!;
+  const gkGrid = document.getElementById('gk-cards-grid')!;
+  fieldGrid.innerHTML = '';
+  gkGrid.innerHTML = '';
+  state.selectedPlayer = null;
+  state.selectedGK = null;
+  updateSelectBar();
 
-  const cardElements = new Map<string, HTMLElement>();
+  const fieldCardEls = new Map<string, HTMLElement>();
+  const gkCardEls = new Map<string, HTMLElement>();
 
   let availableLegends: Legend[];
-  if (state.userData && state.userData.id !== 'guest') {
+  if (state.userData) {
     const ownedIds = [...new Set(state.userData.cards.map((c) => c.legendId))];
     availableLegends = ownedIds.map((id) => getLegendById(id)).filter(Boolean) as Legend[];
   } else {
     availableLegends = [...LEGENDS];
   }
 
-  availableLegends.sort((a, b) => b.rating - a.rating);
+  const fieldPlayers = availableLegends.filter(l => l.position !== 'GK').sort((a, b) => b.rating - a.rating);
+  const gkPlayers = availableLegends.filter(l => l.position === 'GK').sort((a, b) => b.rating - a.rating);
 
-  availableLegends.forEach((legend) => {
+  // If no GKs owned, show all GKs as available
+  const gkList = gkPlayers.length > 0 ? gkPlayers : LEGENDS.filter(l => l.position === 'GK');
+
+  fieldPlayers.forEach((legend) => {
     const card = createLegendCard(legend, () => {
-      const idx = state.selectedPlayers.findIndex((p) => p.id === legend.id);
-      if (idx >= 0) {
-        state.selectedPlayers.splice(idx, 1);
-        updateCardSelection(cardElements.get(legend.id)!, false);
-      } else if (state.selectedPlayers.length < MAX_TEAM_SIZE) {
-        state.selectedPlayers.push(legend);
-        updateCardSelection(cardElements.get(legend.id)!, true);
+      if (state.selectedPlayer?.id === legend.id) {
+        state.selectedPlayer = null;
+        updateCardSelection(fieldCardEls.get(legend.id)!, false);
+      } else {
+        if (state.selectedPlayer) {
+          updateCardSelection(fieldCardEls.get(state.selectedPlayer.id)!, false);
+        }
+        state.selectedPlayer = legend;
+        updateCardSelection(fieldCardEls.get(legend.id)!, true);
       }
-      updateTeamBar();
+      updateSelectBar();
     });
-    cardElements.set(legend.id, card);
-    grid.appendChild(card);
+    fieldCardEls.set(legend.id, card);
+    fieldGrid.appendChild(card);
   });
+
+  gkList.forEach((legend) => {
+    const card = createLegendCard(legend, () => {
+      if (state.selectedGK?.id === legend.id) {
+        state.selectedGK = null;
+        updateCardSelection(gkCardEls.get(legend.id)!, false);
+      } else {
+        if (state.selectedGK) {
+          updateCardSelection(gkCardEls.get(state.selectedGK.id)!, false);
+        }
+        state.selectedGK = legend;
+        updateCardSelection(gkCardEls.get(legend.id)!, true);
+      }
+      updateSelectBar();
+    });
+    gkCardEls.set(legend.id, card);
+    gkGrid.appendChild(card);
+  });
+
+  if (fieldPlayers.length === 0) {
+    fieldGrid.innerHTML = '<div class="empty-msg">Abre sobres para conseguir jugadores</div>';
+  }
 }
 
-function updateTeamBar(): void {
-  const countEl = document.getElementById('team-count')!;
-  const avatarsEl = document.getElementById('selected-avatars')!;
+function updateSelectBar(): void {
+  const playerNameEl = document.getElementById('sel-player-name')!;
+  const gkNameEl = document.getElementById('sel-gk-name')!;
   const startBtn = document.getElementById('btn-start-match') as HTMLButtonElement;
 
-  countEl.textContent = String(state.selectedPlayers.length);
-  startBtn.disabled = state.selectedPlayers.length !== MAX_TEAM_SIZE;
-
-  const minis = avatarsEl.querySelectorAll('.selected-mini');
-  minis.forEach((mini, i) => {
-    if (i < state.selectedPlayers.length) {
-      mini.classList.add('filled');
-      mini.textContent = state.selectedPlayers[i].shortName.charAt(0);
-    } else {
-      mini.classList.remove('filled');
-      mini.textContent = '';
-    }
-  });
+  playerNameEl.textContent = state.selectedPlayer?.shortName || '---';
+  gkNameEl.textContent = state.selectedGK?.shortName || '---';
+  startBtn.disabled = !state.selectedPlayer || !state.selectedGK;
 }
 
 // ==================== GAME SCREEN ====================
@@ -597,7 +572,7 @@ function createLobbyScreen(): HTMLElement {
 
   screen.innerHTML = `
     <button class="back-btn" id="btn-back-lobby">\u2190 Inicio</button>
-    <div class="lobby-header">Online</div>
+    <div class="lobby-header">Online 1v1</div>
     <div class="lobby-content">
       <div class="lobby-section">
         <div class="lobby-title">Crear Sala</div>
@@ -658,8 +633,8 @@ export function showScreen(screen: Screen): void {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
   document.getElementById(`screen-${screen}`)?.classList.add('active');
 
-  if (screen === 'team-select') {
-    renderTeamSelect();
+  if (screen === 'player-select') {
+    renderPlayerSelect();
   }
 }
 
@@ -695,7 +670,7 @@ export async function showResult(homeScore: number, awayScore: number): Promise<
     titleEl.className = 'result-title draw';
   }
 
-  if (state.userData && state.userData.id !== 'guest') {
+  if (state.userData) {
     try {
       const result = await api.submitMatchResult(homeScore, awayScore);
       state.userData.coins = result.totalCoins;
@@ -709,16 +684,6 @@ export async function showResult(homeScore: number, awayScore: number): Promise<
     } catch {
       rewardsEl.innerHTML = '';
     }
-  } else if (state.userData) {
-    const coinsEarned = homeScore > awayScore ? 500 : homeScore === awayScore ? 200 : 100;
-    state.userData.coins += coinsEarned;
-    state.userData.stats.matchesPlayed += 1;
-    state.userData.stats.goalsScored += homeScore;
-    state.userData.stats.goalsConceded += awayScore;
-    if (homeScore > awayScore) state.userData.stats.wins += 1;
-    else if (homeScore === awayScore) state.userData.stats.draws += 1;
-    else state.userData.stats.losses += 1;
-    rewardsEl.innerHTML = `<div class="reward-item">+${coinsEarned} \uD83D\uDCB0</div>`;
   }
 
   overlay.classList.add('active');

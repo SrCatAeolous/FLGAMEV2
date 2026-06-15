@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Legend, LEGENDS } from '../../data/legends';
-import { FIELD, GOAL, BALL_CONFIG, PLAYER_CONFIG, MATCH, COLORS } from '../config';
+import { FIELD, GOAL, BALL_CONFIG, PLAYER_CONFIG, GK_CONFIG, MATCH, COLORS } from '../config';
 import { Ball } from '../objects/Ball';
 import { PlayerSprite } from '../objects/Player';
 import { updateHUD, showResult, hideResult, showScreen } from '../../ui/screens';
@@ -8,10 +8,11 @@ import type { Difficulty } from '../../ui/screens';
 
 export class MatchScene extends Phaser.Scene {
   private ball!: Ball;
-  private homePlayers: PlayerSprite[] = [];
-  private awayPlayers: PlayerSprite[] = [];
+  private homePlayer!: PlayerSprite;
+  private awayPlayer!: PlayerSprite;
+  private homeGK!: PlayerSprite;
+  private awayGK!: PlayerSprite;
   private allPlayers: PlayerSprite[] = [];
-  private controlledPlayer!: PlayerSprite;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private kickKey?: Phaser.Input.Keyboard.Key;
   private sprintKey?: Phaser.Input.Keyboard.Key;
@@ -22,27 +23,32 @@ export class MatchScene extends Phaser.Scene {
   private matchActive = false;
   private goalPause = false;
   private difficulty: Difficulty = 'normal';
-  private playerLegends: Legend[] = [];
+  private playerLegend!: Legend;
+  private gkLegend!: Legend;
   private fieldGraphics!: Phaser.GameObjects.Graphics;
   private joystick = { active: false, dx: 0, dy: 0 };
   private mobileKick = false;
   private mobileSprint = false;
   private mobileSkill = false;
 
+  // Sound
+  private sndKick?: Phaser.Sound.BaseSound;
+  private sndGoal?: Phaser.Sound.BaseSound;
+  private sndWhistle?: Phaser.Sound.BaseSound;
+
   constructor() {
     super({ key: 'MatchScene' });
   }
 
-  init(data: { players: Legend[]; difficulty: Difficulty }): void {
-    this.playerLegends = data.players || [];
+  init(data: { player: Legend; goalkeeper: Legend; difficulty: Difficulty }): void {
+    this.playerLegend = data.player || LEGENDS[0];
+    this.gkLegend = data.goalkeeper || LEGENDS.find(l => l.position === 'GK') || LEGENDS[0];
     this.difficulty = data.difficulty || 'normal';
     this.homeScore = 0;
     this.awayScore = 0;
     this.matchTime = 0;
     this.matchActive = false;
     this.goalPause = false;
-    this.homePlayers = [];
-    this.awayPlayers = [];
     this.allPlayers = [];
   }
 
@@ -57,10 +63,6 @@ export class MatchScene extends Phaser.Scene {
     this.ball = new Ball(this, cx, cy);
 
     this.spawnPlayers();
-
-    if (this.homePlayers.length > 0) {
-      this.controlledPlayer = this.homePlayers[0];
-    }
 
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
@@ -78,56 +80,120 @@ export class MatchScene extends Phaser.Scene {
       });
     });
 
+    this.generateSounds();
     this.setupMobileControls();
 
     this.time.delayedCall(500, () => {
       this.matchActive = true;
+      this.sndWhistle?.play();
     });
   }
 
+  private generateSounds(): void {
+    const mgr = this.sound as Phaser.Sound.WebAudioSoundManager;
+    if (!mgr || !('context' in mgr)) return;
+    const ctx = mgr.context;
+    if (!ctx) return;
+
+    // Kick sound
+    this.sndKick = this.createSynthSound('kick', (actx: AudioContext) => {
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(200, actx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(80, actx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.4, actx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(actx.destination);
+      osc.start(actx.currentTime);
+      osc.stop(actx.currentTime + 0.12);
+    });
+
+    // Goal sound
+    this.sndGoal = this.createSynthSound('goal', (actx: AudioContext) => {
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((freq, i) => {
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, actx.currentTime + i * 0.12);
+        gain.gain.setValueAtTime(0.2, actx.currentTime + i * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + i * 0.12 + 0.3);
+        osc.connect(gain);
+        gain.connect(actx.destination);
+        osc.start(actx.currentTime + i * 0.12);
+        osc.stop(actx.currentTime + i * 0.12 + 0.3);
+      });
+    });
+
+    // Whistle sound
+    this.sndWhistle = this.createSynthSound('whistle', (actx: AudioContext) => {
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, actx.currentTime);
+      osc.frequency.setValueAtTime(1200, actx.currentTime + 0.15);
+      osc.frequency.setValueAtTime(800, actx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.3, actx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.5);
+      osc.connect(gain);
+      gain.connect(actx.destination);
+      osc.start(actx.currentTime);
+      osc.stop(actx.currentTime + 0.5);
+    });
+  }
+
+  private createSynthSound(key: string, playFn: (ctx: AudioContext) => void): Phaser.Sound.BaseSound {
+    const scene = this;
+    return {
+      key,
+      play: () => {
+        try {
+          const mgr = scene.sound as Phaser.Sound.WebAudioSoundManager;
+          if (!mgr || !('context' in mgr)) return true;
+          const actx = mgr.context;
+          if (actx && actx.state === 'running') {
+            playFn(actx);
+          } else if (actx && actx.state === 'suspended') {
+            actx.resume().then(() => playFn(actx));
+          }
+        } catch { /* ignore audio errors */ }
+        return true;
+      },
+    } as unknown as Phaser.Sound.BaseSound;
+  }
+
   private spawnPlayers(): void {
-    const homeX = FIELD.WIDTH * 0.25;
-    const awayX = FIELD.WIDTH * 0.75;
+    const cx = FIELD.WIDTH / 2;
     const cy = FIELD.HEIGHT / 2;
-    const spread = FIELD.HEIGHT * 0.3;
 
-    const homeLegends = this.playerLegends.length >= 3
-      ? this.playerLegends.slice(0, 3)
-      : LEGENDS.slice(0, 3);
+    // Home field player (user controlled)
+    this.homePlayer = new PlayerSprite(this, cx - 100, cy, this.playerLegend, true, 'field');
+    this.allPlayers.push(this.homePlayer);
 
-    const usedIds = new Set(homeLegends.map((l) => l.id));
-    const available = LEGENDS.filter((l) => !usedIds.has(l.id) && l.position !== 'GK');
-    const awayLegends = available.sort(() => Math.random() - 0.5).slice(0, 3);
+    // Home GK (AI)
+    this.homeGK = new PlayerSprite(this, GK_CONFIG.HOME_X, cy, this.gkLegend, true, 'goalkeeper');
+    this.allPlayers.push(this.homeGK);
 
-    const homePositions = [
-      { x: homeX - 60, y: cy },
-      { x: homeX, y: cy - spread },
-      { x: homeX, y: cy + spread },
-    ];
-    const awayPositions = [
-      { x: awayX + 60, y: cy },
-      { x: awayX, y: cy - spread },
-      { x: awayX, y: cy + spread },
-    ];
+    // Away field player (AI)
+    const availableField = LEGENDS.filter(l => l.position !== 'GK' && l.id !== this.playerLegend.id);
+    const awayLegend = availableField[Math.floor(Math.random() * availableField.length)];
+    this.awayPlayer = new PlayerSprite(this, cx + 100, cy, awayLegend, false, 'field');
+    this.allPlayers.push(this.awayPlayer);
 
-    homeLegends.forEach((legend, i) => {
-      const pos = homePositions[i];
-      const player = new PlayerSprite(this, pos.x, pos.y, legend, true);
-      this.homePlayers.push(player);
-      this.allPlayers.push(player);
-    });
-
-    awayLegends.forEach((legend, i) => {
-      const pos = awayPositions[i];
-      const player = new PlayerSprite(this, pos.x, pos.y, legend, false);
-      this.awayPlayers.push(player);
-      this.allPlayers.push(player);
-    });
+    // Away GK (AI)
+    const availableGKs = LEGENDS.filter(l => l.position === 'GK' && l.id !== this.gkLegend.id);
+    const awayGKLegend = availableGKs.length > 0
+      ? availableGKs[Math.floor(Math.random() * availableGKs.length)]
+      : LEGENDS.find(l => l.position === 'GK')!;
+    this.awayGK = new PlayerSprite(this, GK_CONFIG.AWAY_X, cy, awayGKLegend, false, 'goalkeeper');
+    this.allPlayers.push(this.awayGK);
   }
 
   update(_time: number, delta: number): void {
     if (!this.matchActive || this.goalPause) {
-      this.allPlayers.forEach((p) => p.update(delta));
+      this.allPlayers.forEach((p) => p.update(delta, p === this.homePlayer));
       this.ball.update();
       return;
     }
@@ -138,11 +204,12 @@ export class MatchScene extends Phaser.Scene {
       return;
     }
 
-    this.autoSwitchPlayer();
     this.handleInput();
-    this.updateAI(delta);
+    this.updateAwayAI(delta);
+    this.updateGKAI(this.homeGK, true);
+    this.updateGKAI(this.awayGK, false);
 
-    this.allPlayers.forEach((p) => p.update(delta));
+    this.allPlayers.forEach((p) => p.update(delta, p === this.homePlayer));
     this.ball.update();
 
     this.checkGoal();
@@ -151,8 +218,6 @@ export class MatchScene extends Phaser.Scene {
   }
 
   private handleInput(): void {
-    if (!this.controlledPlayer) return;
-
     let dx = 0;
     let dy = 0;
 
@@ -167,35 +232,35 @@ export class MatchScene extends Phaser.Scene {
     }
 
     const isSprinting = this.mobileSprint || (this.sprintKey?.isDown ?? false);
-    const canSprint = this.controlledPlayer.canSprint();
+    const canSprint = this.homePlayer.canSprint();
     const speedMult = isSprinting && canSprint ? PLAYER_CONFIG.SPRINT_MULTIPLIER : 1;
-    const speed = this.controlledPlayer.getSpeed() * speedMult;
+    const speed = this.homePlayer.getSpeed() * speedMult;
 
     if (isSprinting && canSprint) {
-      this.controlledPlayer.sprint(true);
+      this.homePlayer.sprint(true);
     }
 
     if (dx !== 0 || dy !== 0) {
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      this.controlledPlayer.body.setVelocity(
+      this.homePlayer.body.setVelocity(
         (dx / len) * speed,
         (dy / len) * speed
       );
     } else {
-      this.controlledPlayer.body.setVelocity(0, 0);
+      this.homePlayer.body.setVelocity(0, 0);
     }
 
-    const wantsKick = this.mobileKick || Phaser.Input.Keyboard.JustDown(this.kickKey!);
+    const wantsKick = this.mobileKick || (this.kickKey && Phaser.Input.Keyboard.JustDown(this.kickKey));
     if (wantsKick) {
-      this.tryKick(this.controlledPlayer);
+      this.tryKick(this.homePlayer);
       this.mobileKick = false;
     }
 
     const wantsSkill = this.mobileSkill || (this.skillKey && Phaser.Input.Keyboard.JustDown(this.skillKey));
     if (wantsSkill) {
-      const sdx = dx || (this.controlledPlayer.body.body?.velocity.x ?? 0);
-      const sdy = dy || (this.controlledPlayer.body.body?.velocity.y ?? 0);
-      this.controlledPlayer.performSkillMove(sdx, sdy);
+      const sdx = dx || (this.homePlayer.body.body?.velocity.x ?? 0);
+      const sdy = dy || (this.homePlayer.body.body?.velocity.y ?? 0);
+      this.homePlayer.performSkillMove(sdx, sdy);
       this.mobileSkill = false;
     }
   }
@@ -211,105 +276,97 @@ export class MatchScene extends Phaser.Scene {
     const force = BALL_CONFIG.KICK_FORCE * (0.7 + shotPower * 0.6);
 
     this.ball.kick(dirX, dirY, force);
+    this.sndKick?.play();
   }
 
-  private autoSwitchPlayer(): void {
-    let closest: PlayerSprite | null = null;
-    let minDist = Infinity;
-
-    for (const p of this.homePlayers) {
-      const d = p.distanceTo(this.ball.body.x, this.ball.body.y);
-      if (d < minDist) {
-        minDist = d;
-        closest = p;
-      }
-    }
-
-    if (closest && closest !== this.controlledPlayer && minDist < 100) {
-      this.controlledPlayer = closest;
-    }
-  }
-
-  private updateAI(delta: number): void {
+  private updateAwayAI(_delta: number): void {
     const diffMult = this.difficulty === 'easy' ? 0.55 : this.difficulty === 'hard' ? 1.2 : 0.85;
     const ballX = this.ball.body.x;
     const ballY = this.ball.body.y;
     const goalX = 0;
     const goalY = FIELD.HEIGHT / 2;
 
-    this.awayPlayers.forEach((player, index) => {
-      let targetX: number;
-      let targetY: number;
+    let targetX: number;
+    let targetY: number;
 
-      const role = index === 0 ? 'striker' : index === 1 ? 'midfielder' : 'defender';
+    // Chase ball when it's on their half or near
+    if (ballX > FIELD.WIDTH * 0.35) {
+      targetX = ballX - 20;
+      targetY = ballY;
+    } else {
+      // Attack toward home goal
+      targetX = ballX + (goalX - ballX) * 0.4;
+      targetY = ballY + (goalY - ballY) * 0.3;
+    }
 
-      switch (role) {
-        case 'striker':
-          if (ballX < FIELD.WIDTH * 0.5) {
-            targetX = ballX - 30;
-            targetY = ballY;
-          } else {
-            targetX = ballX + (goalX - ballX) * 0.3;
-            targetY = ballY + (goalY - ballY) * 0.3;
-          }
-          break;
-        case 'midfielder':
-          targetX = Math.max(ballX + 50, FIELD.WIDTH * 0.45);
-          targetY = ballY + (index === 1 ? -60 : 60);
-          break;
-        case 'defender':
-        default:
-          targetX = Math.max(FIELD.WIDTH * 0.7, ballX + 100);
-          targetY = FIELD.HEIGHT / 2 + (ballY > FIELD.HEIGHT / 2 ? -40 : 40);
-          break;
+    targetX = Phaser.Math.Clamp(targetX, FIELD.PADDING, FIELD.WIDTH - FIELD.PADDING);
+    targetY = Phaser.Math.Clamp(targetY, FIELD.PADDING, FIELD.HEIGHT - FIELD.PADDING);
+
+    const aiSpeed = this.awayPlayer.getSpeed() * diffMult;
+    this.awayPlayer.moveTo(targetX, targetY, aiSpeed);
+
+    // Kick when close
+    const distToBall = this.awayPlayer.distanceTo(ballX, ballY);
+    if (distToBall < PLAYER_CONFIG.KICK_RANGE + BALL_CONFIG.RADIUS + 5) {
+      const kickDirX = goalX - this.awayPlayer.body.x;
+      const kickDirY = goalY - this.awayPlayer.body.y;
+      const kickForce = BALL_CONFIG.KICK_FORCE * diffMult * (0.6 + this.awayPlayer.legend.stats.sho / 200);
+      this.ball.kick(kickDirX, kickDirY, kickForce);
+      this.sndKick?.play();
+    }
+
+    // Skill moves on hard
+    if (diffMult > 1 && distToBall < 50 && this.awayPlayer.legend.skillMoves >= 3 && Math.random() < 0.005) {
+      const vx = this.awayPlayer.body.body?.velocity.x ?? 0;
+      const vy = this.awayPlayer.body.body?.velocity.y ?? 0;
+      this.awayPlayer.performSkillMove(vx, vy);
+    }
+  }
+
+  private updateGKAI(gk: PlayerSprite, isHome: boolean): void {
+    const ballX = this.ball.body.x;
+    const ballY = this.ball.body.y;
+    const ballVX = this.ball.body.body?.velocity.x ?? 0;
+
+    const baseX = isHome ? GK_CONFIG.HOME_X : GK_CONFIG.AWAY_X;
+    const goalTop = (FIELD.HEIGHT - GOAL.HEIGHT) / 2;
+    const goalBottom = goalTop + GOAL.HEIGHT;
+    const goalCenterY = FIELD.HEIGHT / 2;
+
+    // Track ball Y position within goal range
+    let targetY = Phaser.Math.Clamp(ballY, goalTop + GK_CONFIG.RADIUS, goalBottom - GK_CONFIG.RADIUS);
+
+    // Only track actively when ball is coming toward this GK
+    const ballComingHome = isHome && ballVX < -50;
+    const ballComingAway = !isHome && ballVX > 50;
+    const ballClose = isHome ? ballX < FIELD.WIDTH * 0.35 : ballX > FIELD.WIDTH * 0.65;
+
+    if (ballComingHome || ballComingAway || ballClose) {
+      // Active tracking
+      const gkSpeed = gk.getSpeed() * 1.3;
+      gk.moveTo(baseX, targetY, gkSpeed);
+
+      // Dive on fast shots
+      const ballSpeed = Math.sqrt(ballVX * ballVX + ((this.ball.body.body?.velocity.y ?? 0) ** 2));
+      if (ballSpeed > 250 && gk.distanceTo(ballX, ballY) < GK_CONFIG.SAVE_RANGE * 1.5) {
+        const diveDir = ballY > gk.body.y ? 1 : -1;
+        gk.dive(diveDir);
       }
+    } else {
+      // Idle - stay centered
+      gk.moveTo(baseX, goalCenterY, gk.getSpeed() * 0.5);
+    }
 
-      targetX = Phaser.Math.Clamp(targetX, FIELD.PADDING, FIELD.WIDTH - FIELD.PADDING);
-      targetY = Phaser.Math.Clamp(targetY, FIELD.PADDING, FIELD.HEIGHT - FIELD.PADDING);
-
-      const aiSpeed = player.getSpeed() * diffMult;
-      player.moveTo(targetX, targetY, aiSpeed);
-
-      const distToBall = player.distanceTo(ballX, ballY);
-      if (distToBall < PLAYER_CONFIG.KICK_RANGE + BALL_CONFIG.RADIUS + 5) {
-        const kickDirX = goalX - player.body.x;
-        const kickDirY = goalY - player.body.y;
-        const kickForce = BALL_CONFIG.KICK_FORCE * diffMult * (0.6 + player.legend.stats.sho / 200);
-        this.ball.kick(kickDirX, kickDirY, kickForce);
-      }
-
-      if (diffMult > 1 && distToBall < 60 && player.legend.skillMoves >= 3 && Math.random() < 0.005) {
-        const vx = player.body.body?.velocity.x ?? 0;
-        const vy = player.body.body?.velocity.y ?? 0;
-        player.performSkillMove(vx, vy);
-      }
-    });
-
-    this.homePlayers.forEach((player) => {
-      if (player === this.controlledPlayer) return;
-
-      const dist = player.distanceTo(ballX, ballY);
-      let tx: number;
-      let ty: number;
-
-      if (dist < 150 && ballX < FIELD.WIDTH / 2) {
-        tx = ballX + 50;
-        ty = ballY + (player.body.y > ballY ? -40 : 40);
-      } else {
-        tx = FIELD.WIDTH * 0.3;
-        ty = player.body.y > FIELD.HEIGHT / 2 ? FIELD.HEIGHT * 0.35 : FIELD.HEIGHT * 0.65;
-      }
-
-      player.moveTo(tx, ty, player.getSpeed() * 0.7);
-
-      if (player.distanceTo(ballX, ballY) < PLAYER_CONFIG.KICK_RANGE + BALL_CONFIG.RADIUS) {
-        const kickDirX = FIELD.WIDTH - player.body.x;
-        const kickDirY = FIELD.HEIGHT / 2 - player.body.y;
-        this.ball.kick(kickDirX, kickDirY, BALL_CONFIG.KICK_FORCE * 0.6);
-      }
-    });
-
-    void delta;
+    // GK auto-kick when ball is very close
+    const distToBall = gk.distanceTo(ballX, ballY);
+    if (distToBall < GK_CONFIG.RADIUS + BALL_CONFIG.RADIUS + 8) {
+      const clearX = isHome ? FIELD.WIDTH * 0.6 : FIELD.WIDTH * 0.4;
+      const clearY = FIELD.HEIGHT / 2 + (Math.random() - 0.5) * 200;
+      const kickDirX = clearX - gk.body.x;
+      const kickDirY = clearY - gk.body.y;
+      this.ball.kick(kickDirX, kickDirY, GK_CONFIG.KICK_FORCE);
+      this.sndKick?.play();
+    }
   }
 
   private checkGoal(): void {
@@ -329,8 +386,9 @@ export class MatchScene extends Phaser.Scene {
 
   private onGoal(homeScored: boolean): void {
     this.goalPause = true;
+    this.sndGoal?.play();
 
-    const text = this.add.text(FIELD.WIDTH / 2, FIELD.HEIGHT / 2, '\u00A1GOL!', {
+    const text = this.add.text(FIELD.WIDTH / 2, FIELD.HEIGHT / 2, '¡GOL!', {
       fontFamily: 'Oswald',
       fontSize: '64px',
       fontStyle: 'bold',
@@ -360,34 +418,23 @@ export class MatchScene extends Phaser.Scene {
 
     const cx = FIELD.WIDTH / 2;
     const cy = FIELD.HEIGHT / 2;
-    const spread = FIELD.HEIGHT * 0.3;
 
-    const homePositions = [
-      { x: cx - 120, y: cy },
-      { x: cx - 60, y: cy - spread },
-      { x: cx - 60, y: cy + spread },
-    ];
-    const awayPositions = [
-      { x: cx + 120, y: cy },
-      { x: cx + 60, y: cy - spread },
-      { x: cx + 60, y: cy + spread },
-    ];
+    this.homePlayer.body.setPosition(cx - 100, cy);
+    this.homePlayer.body.setVelocity(0, 0);
 
-    this.homePlayers.forEach((p, i) => {
-      const pos = homePositions[i] || homePositions[0];
-      p.body.setPosition(pos.x, pos.y);
-      p.body.setVelocity(0, 0);
-    });
+    this.awayPlayer.body.setPosition(cx + 100, cy);
+    this.awayPlayer.body.setVelocity(0, 0);
 
-    this.awayPlayers.forEach((p, i) => {
-      const pos = awayPositions[i] || awayPositions[0];
-      p.body.setPosition(pos.x, pos.y);
-      p.body.setVelocity(0, 0);
-    });
+    this.homeGK.body.setPosition(GK_CONFIG.HOME_X, cy);
+    this.homeGK.body.setVelocity(0, 0);
+
+    this.awayGK.body.setPosition(GK_CONFIG.AWAY_X, cy);
+    this.awayGK.body.setVelocity(0, 0);
   }
 
   private endMatch(): void {
     this.matchActive = false;
+    this.sndWhistle?.play();
 
     showResult(this.homeScore, this.awayScore);
 
@@ -398,7 +445,7 @@ export class MatchScene extends Phaser.Scene {
       rematchBtn?.removeEventListener('click', handleRematch);
       backBtn?.removeEventListener('click', handleBack);
       hideResult();
-      this.scene.restart({ players: this.playerLegends, difficulty: this.difficulty });
+      this.scene.restart({ player: this.playerLegend, goalkeeper: this.gkLegend, difficulty: this.difficulty });
     };
 
     const handleBack = () => {
