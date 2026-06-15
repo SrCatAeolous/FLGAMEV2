@@ -145,7 +145,7 @@ function createHomeScreen(): HTMLElement {
       </button>
       <button class="home-menu-btn" id="btn-online">
         <span class="hm-icon">\uD83C\uDF10</span>
-        <span class="hm-label">Online 1v1</span>
+        <span class="hm-label">Buscar Rival</span>
       </button>
     </div>
     <div class="difficulty-section">
@@ -564,7 +564,7 @@ function createGameScreen(): HTMLElement {
   return screen;
 }
 
-// ==================== LOBBY SCREEN ====================
+// ==================== MATCHMAKING SCREEN ====================
 function createLobbyScreen(): HTMLElement {
   const screen = document.createElement('div');
   screen.className = 'screen lobby-screen';
@@ -572,23 +572,41 @@ function createLobbyScreen(): HTMLElement {
 
   screen.innerHTML = `
     <button class="back-btn" id="btn-back-lobby">\u2190 Inicio</button>
-    <div class="lobby-header">Online 1v1</div>
-    <div class="lobby-content">
-      <div class="lobby-section">
-        <div class="lobby-title">Crear Sala</div>
-        <button class="btn btn-primary" id="btn-create-room">Crear Sala</button>
-        <div class="room-code-display" id="room-code-display" style="display:none">
-          <div class="room-code-label">C\u00F3digo de sala:</div>
-          <div class="room-code" id="room-code"></div>
-          <div class="room-waiting">Esperando rival...</div>
+    <div class="lobby-header">\u26BD Matchmaking 1v1</div>
+    <div class="matchmaking-content">
+      <div class="matchmaking-info">
+        <p>Busca un rival aleatorio y juega un partido 1v1.</p>
+        <p>Primero selecciona tu jugador y portero.</p>
+      </div>
+      <div class="matchmaking-status" id="mm-status" style="display:none">
+        <div class="mm-searching">
+          <div class="mm-spinner"></div>
+          <span>Buscando rival...</span>
         </div>
       </div>
-      <div class="lobby-divider"></div>
-      <div class="lobby-section">
-        <div class="lobby-title">Unirse a Sala</div>
-        <input type="text" id="join-room-input" placeholder="C\u00F3digo de sala" class="input-field" maxlength="5" style="text-transform:uppercase" />
-        <button class="btn btn-primary" id="btn-join-room">Unirse</button>
-        <div class="lobby-error" id="lobby-error"></div>
+      <div class="mm-opponent" id="mm-opponent" style="display:none">
+        <div class="mm-vs">\u00A1Rival encontrado!</div>
+        <div class="mm-opponent-name" id="mm-opponent-name"></div>
+        <div class="mm-opponent-legend" id="mm-opponent-legend"></div>
+      </div>
+      <button class="btn btn-primary btn-large" id="btn-find-match" disabled>\uD83D\uDD0E Buscar Rival</button>
+      <div class="mm-selections">
+        <div class="mm-sel-row">
+          <span class="sel-label">Tu jugador:</span> <span id="mm-player-name" class="mm-sel-value">No seleccionado</span>
+        </div>
+        <div class="mm-sel-row">
+          <span class="sel-label">Tu portero:</span> <span id="mm-gk-name" class="mm-sel-value">No seleccionado</span>
+        </div>
+        <button class="btn" id="btn-mm-select">Elegir Equipo</button>
+      </div>
+      <div class="mm-controls-help">
+        <div class="controls-title">Controles</div>
+        <div class="controls-grid">
+          <div class="ctrl-item"><kbd>\u2190\u2191\u2193\u2192</kbd> o <kbd>WASD</kbd> Mover</div>
+          <div class="ctrl-item"><kbd>SPACE</kbd> o <kbd>E</kbd> Chutar</div>
+          <div class="ctrl-item"><kbd>SHIFT</kbd> Sprint</div>
+          <div class="ctrl-item"><kbd>Q</kbd> Regate</div>
+        </div>
       </div>
     </div>
   `;
@@ -598,33 +616,63 @@ function createLobbyScreen(): HTMLElement {
     updateHomeUI();
   });
 
-  screen.querySelector('#btn-create-room')!.addEventListener('click', () => {
-    const codeDisplay = document.getElementById('room-code-display')!;
-    const codeEl = document.getElementById('room-code')!;
-    const code = generateLocalRoomCode();
-    codeEl.textContent = code;
-    codeDisplay.style.display = 'block';
+  screen.querySelector('#btn-mm-select')!.addEventListener('click', () => {
+    showScreen('player-select');
   });
 
-  screen.querySelector('#btn-join-room')!.addEventListener('click', () => {
-    const input = document.getElementById('join-room-input') as HTMLInputElement;
-    const error = document.getElementById('lobby-error')!;
-    const code = input.value.trim().toUpperCase();
-    if (code.length !== 5) {
-      error.textContent = 'El c\u00F3digo debe tener 5 caracteres';
-      return;
-    }
-    error.textContent = 'Conectando...';
+  screen.querySelector('#btn-find-match')!.addEventListener('click', () => {
+    if (!state.selectedPlayer || !state.selectedGK) return;
+    startMatchmaking();
   });
 
   return screen;
 }
 
-function generateLocalRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 5; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-  return code;
+function updateMatchmakingUI(): void {
+  const playerEl = document.getElementById('mm-player-name');
+  const gkEl = document.getElementById('mm-gk-name');
+  const findBtn = document.getElementById('btn-find-match') as HTMLButtonElement;
+
+  if (playerEl) playerEl.textContent = state.selectedPlayer?.shortName || 'No seleccionado';
+  if (gkEl) gkEl.textContent = state.selectedGK?.shortName || 'No seleccionado';
+  if (findBtn) findBtn.disabled = !state.selectedPlayer || !state.selectedGK;
+}
+
+function startMatchmaking(): void {
+  const statusEl = document.getElementById('mm-status')!;
+  const opponentEl = document.getElementById('mm-opponent')!;
+  const findBtn = document.getElementById('btn-find-match') as HTMLButtonElement;
+
+  statusEl.style.display = 'flex';
+  opponentEl.style.display = 'none';
+  findBtn.disabled = true;
+
+  // Simulate matchmaking search (1-3 seconds)
+  const searchTime = 1000 + Math.random() * 2000;
+
+  setTimeout(() => {
+    statusEl.style.display = 'none';
+    opponentEl.style.display = 'block';
+
+    // Pick random opponent
+    const fieldPlayers = LEGENDS.filter(l => l.position !== 'GK' && l.id !== state.selectedPlayer?.id);
+    const oppLegend = fieldPlayers[Math.floor(Math.random() * fieldPlayers.length)];
+    const oppNames = ['CR7_Fan', 'Maradona10', 'D10S', 'FutMaster', 'GoldenBoy', 'ElPibe', 'LaPulga', 'R9Legend', 'ZizouMagic', 'OFenomeno', 'ElMatador', 'Fantasista'];
+    const oppName = oppNames[Math.floor(Math.random() * oppNames.length)];
+
+    document.getElementById('mm-opponent-name')!.textContent = oppName;
+    document.getElementById('mm-opponent-legend')!.textContent = `${oppLegend.name} (${oppLegend.rating})`;
+
+    // Start match after showing opponent
+    setTimeout(() => {
+      opponentEl.style.display = 'none';
+      findBtn.disabled = false;
+      if (state.selectedPlayer && state.selectedGK) {
+        showScreen('game');
+        state.onStartGame(state.selectedPlayer, state.selectedGK, state.difficulty);
+      }
+    }, 1500);
+  }, searchTime);
 }
 
 // ==================== NAVIGATION ====================
@@ -635,6 +683,9 @@ export function showScreen(screen: Screen): void {
 
   if (screen === 'player-select') {
     renderPlayerSelect();
+  }
+  if (screen === 'lobby') {
+    updateMatchmakingUI();
   }
 }
 
