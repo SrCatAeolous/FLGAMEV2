@@ -1,0 +1,46 @@
+{
+  "name": "futlegends",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite --port 3000 --host\" \"tsx watch server/index.ts\"",
+    "dev:frontend": "vite --port 3000 --host",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "start": "tsx server/index.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "football",
+    "game",
+    "legends",
+    "phaser"
+  ],
+  "author": "SrCatAeolous",
+  "license": "ISC",
+  "description": "Fut Legends - Web football game with legendary players, Haxball style",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.0",
+    "phaser": "^4.1.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.9.3",
+    "concurrently": "^10.0.3",
+    "tsx": "^4.22.4"
+  }
+}

@@ -1,0 +1,52 @@
+export const FIELD = {
+  WIDTH: 800,
+  HEIGHT: 500,
+  PADDING: 30,
+  LINE_COLOR: 0xffffff,
+  GRASS_COLOR: 0x1a6b30,
+  GRASS_DARK: 0x155a28,
+  BORDER_COLOR: 0xd4af37,
+};
+
+export const GOAL = {
+  WIDTH: 12,
+  HEIGHT: 120,
+  COLOR: 0xffffff,
+  NET_COLOR: 0xcccccc,
+};
+
+export const BALL_CONFIG = {
+  RADIUS: 8,
+  COLOR: 0xffffff,
+  FRICTION: 0.985,
+  MAX_SPEED: 500,
+  KICK_FORCE: 350,
+  POWER_SHOT_MULTIPLIER: 1.8,
+};
+
+export const PLAYER_CONFIG = {
+  RADIUS: 16,
+  SPEED: 180,
+  SPRINT_MULTIPLIER: 1.5,
+  KICK_RANGE: 30,
+  BORDER_WIDTH: 3,
+  STAMINA_MAX: 100,
+  STAMINA_DRAIN: 25,
+  STAMINA_REGEN: 12,
+  SKILL_MOVE_DURATION: 400,
+  SKILL_MOVE_SPEED_BOOST: 2.0,
+};
+
+export const MATCH = {
+  DURATION: 120,
+  GOAL_PAUSE: 2000,
+};
+
+export const COLORS = {
+  HOME: 0xd4af37,
+  AWAY: 0x4a90d9,
+  HOME_OUTLINE: 0xffd700,
+  AWAY_OUTLINE: 0x2b6cb0,
+  TEXT: 0xffffff,
+  GOLD: 0xd4af37,
+};
