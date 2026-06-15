@@ -17,6 +17,7 @@ export class MatchScene extends Phaser.Scene {
   private kickKey?: Phaser.Input.Keyboard.Key;
   private sprintKey?: Phaser.Input.Keyboard.Key;
   private skillKey?: Phaser.Input.Keyboard.Key;
+  private wasdKeys?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key; E: Phaser.Input.Keyboard.Key; };
   private homeScore = 0;
   private awayScore = 0;
   private matchTime = 0;
@@ -69,6 +70,13 @@ export class MatchScene extends Phaser.Scene {
       this.kickKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.sprintKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
       this.skillKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+      this.wasdKeys = {
+        W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+        A: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+        S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+        D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+        E: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+      };
     }
 
     this.allPlayers.forEach((p) => {
@@ -224,11 +232,11 @@ export class MatchScene extends Phaser.Scene {
     if (this.joystick.active) {
       dx = this.joystick.dx;
       dy = this.joystick.dy;
-    } else if (this.cursors) {
-      if (this.cursors.left.isDown) dx = -1;
-      if (this.cursors.right.isDown) dx = 1;
-      if (this.cursors.up.isDown) dy = -1;
-      if (this.cursors.down.isDown) dy = 1;
+    } else {
+      if (this.cursors?.left.isDown || this.wasdKeys?.A.isDown) dx = -1;
+      if (this.cursors?.right.isDown || this.wasdKeys?.D.isDown) dx = 1;
+      if (this.cursors?.up.isDown || this.wasdKeys?.W.isDown) dy = -1;
+      if (this.cursors?.down.isDown || this.wasdKeys?.S.isDown) dy = 1;
     }
 
     const isSprinting = this.mobileSprint || (this.sprintKey?.isDown ?? false);
@@ -250,7 +258,7 @@ export class MatchScene extends Phaser.Scene {
       this.homePlayer.body.setVelocity(0, 0);
     }
 
-    const wantsKick = this.mobileKick || (this.kickKey && Phaser.Input.Keyboard.JustDown(this.kickKey));
+    const wantsKick = this.mobileKick || (this.kickKey && Phaser.Input.Keyboard.JustDown(this.kickKey)) || (this.wasdKeys?.E && Phaser.Input.Keyboard.JustDown(this.wasdKeys.E));
     if (wantsKick) {
       this.tryKick(this.homePlayer);
       this.mobileKick = false;

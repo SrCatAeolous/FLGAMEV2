@@ -980,6 +980,7 @@ body {
   background: var(--bg-dark);
   justify-content: flex-start;
   gap: 16px;
+  overflow-y: auto;
 }
 
 .lobby-header {
@@ -990,71 +991,149 @@ body {
   letter-spacing: 2px;
 }
 
-.lobby-content {
+.matchmaking-content {
   width: 100%;
   max-width: 400px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+  align-items: center;
 }
 
-.lobby-section {
+.matchmaking-info {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.btn-large {
+  padding: 16px 40px !important;
+  font-size: 18px !important;
+  width: 100%;
+  max-width: 300px;
+}
+
+.matchmaking-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.mm-searching {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--gold-primary);
+  font-family: 'Oswald', sans-serif;
+  font-size: 18px;
+}
+
+.mm-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #333;
+  border-top-color: var(--gold-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.mm-opponent {
+  text-align: center;
   padding: 20px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--gold-primary);
+  width: 100%;
+}
+
+.mm-vs {
+  font-family: 'Oswald', sans-serif;
+  font-size: 22px;
+  color: var(--accent-green);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.mm-opponent-name {
+  font-family: 'Oswald', sans-serif;
+  font-size: 20px;
+  color: var(--text-main);
+}
+
+.mm-opponent-legend {
+  font-size: 14px;
+  color: var(--gold-primary);
+  margin-top: 4px;
+}
+
+.mm-selections {
+  width: 100%;
+  padding: 16px;
   background: var(--bg-card);
   border-radius: 12px;
   border: 1px solid #222;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
 }
 
-.lobby-title {
+.mm-sel-row {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.mm-sel-value {
+  color: var(--gold-primary);
+  font-weight: 600;
+}
+
+.mm-controls-help {
+  width: 100%;
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid #222;
+}
+
+.controls-title {
   font-family: 'Oswald', sans-serif;
-  font-size: 18px;
-  color: var(--text-main);
+  font-size: 14px;
+  color: var(--gold-primary);
   text-transform: uppercase;
-}
-
-.lobby-divider {
-  width: 40px;
-  height: 2px;
-  background: #333;
-  align-self: center;
-}
-
-.room-code-display {
+  margin-bottom: 8px;
   text-align: center;
 }
 
-.room-code-label {
-  font-size: 13px;
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.ctrl-item {
+  font-size: 12px;
   color: var(--text-dim);
-  margin-bottom: 4px;
 }
 
-.room-code {
-  font-family: 'Oswald', sans-serif;
-  font-size: 36px;
-  color: var(--gold-primary);
-  letter-spacing: 6px;
-}
-
-.room-waiting {
-  font-size: 13px;
-  color: var(--accent-green);
-  animation: blink 1.5s infinite;
+.ctrl-item kbd {
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-main);
 }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
-}
-
-.lobby-error {
-  font-size: 13px;
-  color: var(--accent-red);
-  min-height: 18px;
 }
 
 /* === RESPONSIVE === */

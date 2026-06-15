@@ -44,7 +44,7 @@ export class PlayerSprite {
     this.body.setOffset(-radius, -radius);
     this.body.setCollideWorldBounds(true);
     this.body.setDamping(true);
-    this.body.setDrag(0.9);
+    this.body.setDrag(0.85);
     this.body.setDepth(4);
     this.body.setMaxVelocity(this.getSpeed() * PLAYER_CONFIG.SPRINT_MULTIPLIER);
 
