@@ -4,8 +4,8 @@ import { startGame } from './game/GameManager';
 import type { Legend } from './data/legends';
 import type { Difficulty } from './ui/screens';
 
-function onStartGame(players: Legend[], difficulty: Difficulty): void {
-  startGame(players, difficulty);
+function onStartGame(player: Legend, goalkeeper: Legend, difficulty: Difficulty): void {
+  startGame(player, goalkeeper, difficulty);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
