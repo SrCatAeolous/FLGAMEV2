@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcryptjs';
-import { connectDB } from '../_lib/db';
-import { User } from '../_lib/User';
-import { signToken } from '../_lib/auth';
+import { connectDB } from '../_lib/db.js';
+import { User } from '../_lib/User.js';
+import { signToken } from '../_lib/auth.js';
 
 const STARTER_CARDS = [
   { legendId: 'valderrama' },
